@@ -10,6 +10,12 @@ class ProductOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ProductCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    ferment_min: int
+    bake_min: int
+
+
 class OvenOut(BaseModel):
     id: int
     label: str
@@ -34,7 +40,7 @@ class BatchOut(BaseModel):
 class BatchCreate(BaseModel):
     product_id: int
     oven_id: int
-    start_min: int = Field(ge=0, le=24 * 60 - 1)
+    start_min: int  # range checked by app.services.validation so the 400 names the field
     code: str | None = None
 
 

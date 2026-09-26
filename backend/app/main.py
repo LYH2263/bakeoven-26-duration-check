@@ -6,11 +6,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.config import settings
 from app.database import Base, SessionLocal, engine
+from app.services.migrate import apply_migrations
 from app.services.seed import seed_if_empty
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    apply_migrations(engine)
     Base.metadata.create_all(bind=engine)
     if settings.seed_on_empty:
         db = SessionLocal()

@@ -10,6 +10,7 @@ from app.schemas.schemas import (
     ConflictOut,
     GanttBlock,
     OvenOut,
+    ProductCreate,
     ProductOut,
     WindowOut,
 )
@@ -20,6 +21,7 @@ from app.services.oven_engine import (
     find_conflicts,
     next_free_window,
 )
+from app.services.validation import recipe_errors, start_min_errors
 
 api_router = APIRouter()
 
@@ -68,6 +70,20 @@ def products(db: Session = Depends(get_db)):
     return db.scalars(select(Product).order_by(Product.id)).all()
 
 
+@api_router.post("/products", response_model=ProductOut)
+def create_product(body: ProductCreate, db: Session = Depends(get_db)):
+    errors = recipe_errors(body.ferment_min, body.bake_min)
+    if errors:
+        raise HTTPException(400, "；".join(errors))
+    if db.scalar(select(Product.id).where(Product.name == body.name)):
+        raise HTTPException(409, f"产品 {body.name} 已存在")
+    product = Product(name=body.name, ferment_min=body.ferment_min, bake_min=body.bake_min)
+    db.add(product)
+    db.commit()
+    db.refresh(product)
+    return product
+
+
 @api_router.get("/ovens", response_model=list[OvenOut])
 def ovens(db: Session = Depends(get_db)):
     return db.scalars(select(Oven).order_by(Oven.id)).all()
@@ -81,6 +97,10 @@ def batches(db: Session = Depends(get_db)):
 
 @api_router.post("/batches", response_model=BatchOut)
 def create_batch(body: BatchCreate, db: Session = Depends(get_db)):
+    # Field validation runs before any overlap/scheduling logic.
+    errors = start_min_errors(body.start_min)
+    if errors:
+        raise HTTPException(400, "；".join(errors))
     product = db.get(Product, body.product_id)
     oven = db.get(Oven, body.oven_id)
     if not product or not oven:
