@@ -10,6 +10,7 @@ from app.schemas.schemas import (
     ConflictOut,
     GanttBlock,
     OvenOut,
+    ProductCreate,
     ProductOut,
     WindowOut,
 )
@@ -20,8 +21,18 @@ from app.services.oven_engine import (
     find_conflicts,
     next_free_window,
 )
+from app.services.validation import (
+    FieldValidationError,
+    validate_recipe,
+    validate_start_min,
+)
 
 api_router = APIRouter()
+
+
+def _reject(exc: FieldValidationError) -> HTTPException:
+    """422 whose detail names the offending field."""
+    return HTTPException(status_code=422, detail=str(exc))
 
 
 def _recipe(p: Product) -> RecipeDurations:
@@ -68,6 +79,21 @@ def products(db: Session = Depends(get_db)):
     return db.scalars(select(Product).order_by(Product.id)).all()
 
 
+@api_router.post("/products", response_model=ProductOut)
+def create_product(body: ProductCreate, db: Session = Depends(get_db)):
+    try:
+        validate_recipe(body.ferment_min, body.bake_min)
+    except FieldValidationError as exc:
+        raise _reject(exc) from exc
+    if db.scalar(select(Product.id).where(Product.name == body.name)):
+        raise HTTPException(409, "产品名称已存在")
+    product = Product(name=body.name, ferment_min=body.ferment_min, bake_min=body.bake_min)
+    db.add(product)
+    db.commit()
+    db.refresh(product)
+    return product
+
+
 @api_router.get("/ovens", response_model=list[OvenOut])
 def ovens(db: Session = Depends(get_db)):
     return db.scalars(select(Oven).order_by(Oven.id)).all()
@@ -81,6 +107,11 @@ def batches(db: Session = Depends(get_db)):
 
 @api_router.post("/batches", response_model=BatchOut)
 def create_batch(body: BatchCreate, db: Session = Depends(get_db)):
+    # validate before any occupancy/overlap computation
+    try:
+        validate_start_min(body.start_min)
+    except FieldValidationError as exc:
+        raise _reject(exc) from exc
     product = db.get(Product, body.product_id)
     oven = db.get(Oven, body.oven_id)
     if not product or not oven:

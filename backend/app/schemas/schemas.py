@@ -2,6 +2,12 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+class ProductCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    ferment_min: int
+    bake_min: int
+
+
 class ProductOut(BaseModel):
     id: int
     name: str
@@ -34,7 +40,8 @@ class BatchOut(BaseModel):
 class BatchCreate(BaseModel):
     product_id: int
     oven_id: int
-    start_min: int = Field(ge=0, le=24 * 60 - 1)
+    # range checked in the handler via validate_start_min so the 422 names the field
+    start_min: int
     code: str | None = None
 
 

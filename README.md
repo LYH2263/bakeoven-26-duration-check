@@ -37,3 +37,18 @@ docker compose up --build
 ```bash
 docker compose exec api pytest -q
 ```
+
+## 数据校验与迁移
+
+产品/批次共用一套时长与开工规则，应用层（422 并指明字段）与数据库 CHECK 约束双重执行：
+
+- `ferment_min >= 0`（发酵分钟不得为负）
+- `bake_min >= 1`（烘烤分钟至少为 1）
+- `0 <= start_min < 1440`（开工分钟不得为负且小于一天的分钟数）
+
+`POST /api/products` 创建产品；`POST /api/batches` 在重叠判断之前先校验 `start_min`。
+迁移 `backend/migrations/001_add_duration_start_checks.sql` 幂等，随应用启动自动执行，也可手动执行：
+
+```bash
+docker compose exec api python -m app.services.migrate
+```
